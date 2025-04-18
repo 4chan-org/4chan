@@ -1,0 +1,891 @@
+openapi: 3.1.0
+info:
+  title: 4chan v2 Threads API
+  version: 1.0.0
+  description: |
+    API para la gestión de hilos y posts en 4chan v2, proporcionando endpoints para crear, leer y gestionar hilos y sus respuestas.
+  contact:
+    name: Equipo de Desarrollo 4chan v2
+    email: dev@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.4chan-v2.example.com/api/v1
+    description: Servidor de producción
+  - url: https://staging-api.4chan-v2.example.com/api/v1
+    description: Servidor de staging
+  - url: http://localhost/api/v1
+    description: Servidor de desarrollo local
+
+tags:
+  - name: threads
+    description: Operaciones con hilos
+  - name: posts
+    description: Operaciones con posts
+  - name: catalog
+    description: Visualización en catálogo
+
+paths:
+  /boards/{boardId}/threads:
+    get:
+      summary: Listar hilos de un tablón
+      description: Obtiene la lista de hilos activos en un tablón
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: page
+          in: query
+          description: Número de página a mostrar
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        '200':
+          description: Lista de hilos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ThreadWithStats'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: Crear nuevo hilo
+      description: Crea un nuevo hilo en el tablón especificado
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ThreadCreate'
+      responses:
+        '201':
+          description: Hilo creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadWithStats'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /boards/{boardId}/catalog:
+    get:
+      summary: Obtener catálogo del tablón
+      description: Obtiene una vista de catálogo con todos los hilos activos
+      tags:
+        - catalog
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      responses:
+        '200':
+          description: Catálogo del tablón
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CatalogThread'
+                  meta:
+                    type: object
+                    properties:
+                      threadCount:
+                        type: integer
+                        example: 200
+                      boardName:
+                        type: string
+                        example: Random
+                      boardDescription:
+                        type: string
+                        example: Random discussion
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/threads/{threadId}:
+    get:
+      summary: Obtener hilo completo
+      description: Obtiene un hilo con todos sus posts
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/PathThreadId'
+      responses:
+        '200':
+          description: Hilo completo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadWithPosts'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar hilo
+      description: Elimina un hilo y todas sus respuestas
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/PathThreadId'
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Hilo eliminado exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/threads/{threadId}/posts:
+    get:
+      summary: Listar posts de un hilo
+      description: Obtiene la lista de posts de un hilo específico
+      tags:
+        - posts
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/PathThreadId'
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+      responses:
+        '200':
+          description: Lista de posts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Post'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: Responder a un hilo
+      description: Crea un nuevo post en el hilo especificado
+      tags:
+        - posts
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/PathThreadId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PostCreate'
+      responses:
+        '201':
+          description: Post creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /boards/{boardId}/posts/{postId}:
+    get:
+      summary: Obtener post específico
+      description: Obtiene un post individual por su ID
+      tags:
+        - posts
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - name: postId
+          in: path
+          required: true
+          description: ID del post
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Post específico
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar post
+      description: Elimina un post específico
+      tags:
+        - posts
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - name: postId
+          in: path
+          required: true
+          description: ID del post
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Post eliminado exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /threads/latest:
+    get:
+      summary: Obtener hilos recientes en todos los tablones
+      description: Obtiene los hilos más recientes de todos los tablones
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - name: nsfw
+          in: query
+          description: Incluir tablones NSFW
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Hilos recientes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ThreadWithStats'
+                  meta:
+                    type: object
+                    properties:
+                      totalThreads:
+                        type: integer
+                        example: 100
+
+  /threads/popular:
+    get:
+      summary: Obtener hilos populares
+      description: Obtiene los hilos más activos o populares
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - name: period
+          in: query
+          description: Período de tiempo para calcular popularidad
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: day
+        - name: nsfw
+          in: query
+          description: Incluir tablones NSFW
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Hilos populares
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ThreadWithStats'
+                  meta:
+                    type: object
+                    properties:
+                      period:
+                        type: string
+                        example: day
+                      totalThreads:
+                        type: integer
+                        example: 100
+
+  /threads/search:
+    get:
+      summary: Buscar hilos
+      description: Busca hilos por texto, contenido o atributos
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: query
+          in: query
+          description: Texto a buscar
+          required: true
+          schema:
+            type: string
+            minLength: 3
+        - name: boardId
+          in: query
+          description: Filtrar por tablón
+          schema:
+            type: string
+        - name: subject
+          in: query
+          description: Buscar solo en el asunto
+          schema:
+            type: boolean
+            default: false
+        - name: withFiles
+          in: query
+          description: Solo hilos con archivos
+          schema:
+            type: boolean
+            default: false
+        - name: nsfw
+          in: query
+          description: Incluir tablones NSFW
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Resultados de búsqueda
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ThreadWithStats'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /threads/{threadId}/moderate:
+    put:
+      summary: Moderar hilo
+      description: Realiza acciones de moderación sobre un hilo
+      tags:
+        - threads
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          description: ID del hilo
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [sticky, unsticky, lock, unlock, cycle, uncycle]
+                  description: Acción a realizar
+                reason:
+                  type: string
+                  description: Razón de la acción de moderación
+                cycleLimit:
+                  type: integer
+                  description: Límite de posts para hilos cíclicos (si la acción es 'cycle')
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Acción de moderación realizada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Thread'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT de autenticación
+
+  parameters:
+    QueryLimit:
+      name: limit
+      in: query
+      description: Número máximo de elementos a devolver
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    QueryOffset:
+      name: offset
+      in: query
+      description: Número de elementos a saltar
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    PathBoardId:
+      name: boardId
+      in: path
+      description: ID del tablón
+      required: true
+      schema:
+        type: string
+
+    PathThreadId:
+      name: threadId
+      in: path
+      description: ID del hilo
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: No autorizado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Prohibido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    TooManyRequests:
+      description: Demasiadas solicitudes
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Segundos a esperar antes de reintentar
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - statusCode
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: Bad Request
+        error:
+          type: string
+          example: Invalid input
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    PaginationMeta:
+      type: object
+      properties:
+        totalItems:
+          type: integer
+          example: 100
+        itemCount:
+          type: integer
+          example: 20
+        itemsPerPage:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 5
+        currentPage:
+          type: integer
+          example: 1
+
+    Thread:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        subject:
+          type: string
+          nullable: true
+          example: Thread subject
+        isSticky:
+          type: boolean
+          example: false
+        isLocked:
+          type: boolean
+          example: false
+        isCyclic:
+          type: boolean
+          example: false
+        cycleLimit:
+          type: integer
+          nullable: true
+          example: 500
+        bumpedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        boardId:
+          type: string
+          example: b
+
+    ThreadWithStats:
+      allOf:
+        - $ref: '#/components/schemas/Thread'
+        - type: object
+          properties:
+            replyCount:
+              type: integer
+              example: 42
+            fileCount:
+              type: integer
+              example: 15
+            op:
+              $ref: '#/components/schemas/Post'
+            lastReplies:
+              type: array
+              items:
+                $ref: '#/components/schemas/Post'
+              maxItems: 5
+              description: Las últimas respuestas del hilo (para previsualización)
+            board:
+              type: object
+              properties:
+                id:
+                  type: string
+                  example: b
+                name:
+                  type: string
+                  example: Random
+
+    ThreadWithPosts:
+      allOf:
+        - $ref: '#/components/schemas/Thread'
+        - type: object
+          properties:
+            posts:
+              type: array
+              items:
+                $ref: '#/components/schemas/Post'
+              description: Todos los posts del hilo
+            board:
+              $ref: '#/components/schemas/Board'
+            replyCount:
+              type: integer
+              example: 42
+            fileCount:
+              type: integer
+              example: 15
+
+    CatalogThread:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        subject:
+          type: string
+          nullable: true
+          example: Thread subject
+        boardId:
+          type: string
+          example: b
+        createdAt:
+          type: string
+          format: date-time
+        bumpedAt:
+          type: string
+          format: date-time
+        replyCount:
+          type: integer
+          example: 42
+        fileCount:
+          type: integer
+          example: 15
+        isSticky:
+          type: boolean
+          example: false
+        isLocked:
+          type: boolean
+          example: false
+        excerpt:
+          type: string
+          example: This is the beginning of the thread text...
+        opName:
+          type: string
+          nullable: true
+          example: Anonymous
+        thumbnailUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: https://example.com/path/to/thumbnail.jpg
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        postNumber:
+          type: integer
+          example: 12345
+        name:
+          type: string
+          nullable: true
+          example: Anonymous
+        tripcode:
+          type: string
+          nullable: true
+          example: !AbCdEf123
+        message:
+          type: string
+          nullable: true
+          example: This is a post message
+        isDeleted:
+          type: boolean
+          example: false
+        isSpoilered:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        threadId:
+          type: string
+          example: 987e6543-e21b-12d3-a456-426614174000
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        filename:
+          type: string
+          example: example.jpg
+        filesize:
+          type: integer
+          example: 1234567
+        width:
+          type: integer
+          nullable: true
+          example: 1920
+        height:
+          type: integer
+          nullable: true
+          example: 1080
+        mimeType:
+          type: string
+          example: image/jpeg
+        thumbnailUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/thumbnail.jpg
+        fileUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/file.jpg
+        isSpoilered:
+          type: boolean
+          example: false
+        md5Hash:
+          type: string
+          example: 5d41402abc4b2a76b9719d911017c592
+
+    ThreadCreate:
+      type: object
+      required:
+        - message
+        - captchaId
+        - captchaSolution
+      properties:
+        subject:
+          type: string
+          maxLength: 100
+          example: This is a thread subject
+        message:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          example: This is the content of the thread
+        name:
+          type: string
+          maxLength: 100
+          default: Anonymous
+          example: Anonymous
+        tripcode:
+          type: string
+          maxLength: 100
+          example: password#tripcode
+        file:
+          type: string
+          format: binary
+          description: Archivo a adjuntar (imagen/video)
+        spoiler:
+          type: boolean
+          default: false
+          description: Si el archivo debe ser marcado como spoiler
+        captchaId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        captchaSolution:
+          type: string
+          example: a7x9p2
+
+    PostCreate:
+      type: object
+      required:
+        - message
+        - captchaId
+        - captchaSolution
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          example: This is a reply to the thread
+        name:
+          type: string
+          maxLength: 100
+          default: Anonymous
+          example: Anonymous
+        tripcode:
+          type: string
+          maxLength: 100
+          example: password#tripcode
+        file:
+          type: string
+          format: binary
+          description: Archivo a adjuntar (imagen/video)
+        spoiler:
+          type: boolean
+          default: false
+          description: Si el archivo debe ser marcado como spoiler
+        captchaId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        captchaSolution:
+          type: string
+          example: a7x9p2
+
+    Board:
+      type: object
+      properties:
+        id:
+          type: string
+          example: b
+        name:
+          type: string
+          example: Random
+        description:
+          type: string
+          nullable: true
+          example: Random discussion
+        isNsfw:
+          type: boolean
+          example: false
+        maxThreads:
+          type: integer
+          example: 200
+        bumpLimit:
+          type: integer
+          example: 300
+        cooldownThreads:
+          type: integer
+          example: 60
+        cooldownReplies:
+          type: integer
+          example: 30

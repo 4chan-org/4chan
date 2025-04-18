@@ -1,0 +1,231 @@
+version: '3.8'
+
+services:
+  # API Gateway
+  nginx:
+    image: nginx:alpine
+    container_name: 4chan_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./docker/nginx/ssl:/etc/nginx/ssl
+      - ./docker/nginx/logs:/var/log/nginx
+    depends_on:
+      - frontend
+      - api
+      - auth
+      - files
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: 4chan_frontend
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost/api/v1
+      - VITE_AUTH_URL=http://localhost/api/v1/auth
+      - VITE_FILES_URL=http://localhost/api/v1/files
+    networks:
+      - frontend
+    restart: unless-stopped
+
+  # Backend API
+  api:
+    build:
+      context: ../api-core
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_api
+    volumes:
+      - ../api-core:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://[USERNAME]:[PASSWORD]@postgres:5432/4chan?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=[REDACTED]
+      - JWT_REFRESH_SECRET=[REDACTED]
+      - FILE_STORAGE_TYPE=local
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - backend
+    restart: unless-stopped
+
+  # Auth Service
+  auth:
+    build:
+      context: ../api-core
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_auth
+    command: npm run start:dev -- --app auth
+    volumes:
+      - ../api-core:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://[USERNAME]:[PASSWORD]@postgres:5432/4chan?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=[REDACTED]
+      - JWT_REFRESH_SECRET=[REDACTED]
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - backend
+    restart: unless-stopped
+
+  # File Service
+  files:
+    build:
+      context: ../api-core
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_files
+    command: npm run start:dev -- --app files
+    volumes:
+      - ../api-core:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://[USERNAME]:[PASSWORD]@postgres:5432/4chan?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=[REDACTED]
+      - FILE_STORAGE_TYPE=local
+      - FILE_STORAGE_PATH=/app/uploads
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    networks:
+      - backend
+    restart: unless-stopped
+
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: 4chan_postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    environment:
+      POSTGRES_USER: [USERNAME]
+      POSTGRES_PASSWORD: [PASSWORD]
+      POSTGRES_DB: 4chan
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: 4chan_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # MinIO (S3)
+  minio:
+    image: minio/minio:latest
+    container_name: 4chan_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: [USERNAME]
+      MINIO_ROOT_PASSWORD: [PASSWORD]
+    command: server --console-address ":9001" /data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  # Prometheus (M�tricas)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: 4chan_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  # Grafana (Visualizaci�n)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: 4chan_grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=[PASSWORD]
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+  monitoring:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

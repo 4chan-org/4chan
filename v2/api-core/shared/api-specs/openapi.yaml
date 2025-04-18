@@ -1,0 +1,958 @@
+openapi: 3.1.0
+info:
+  title: 4chan v2 API
+  version: 1.0.0
+  description: |
+    API moderna para 4chan v2 que proporciona acceso a funcionalidades de tablones, hilos, posts y sistemas de moderación.
+  contact:
+    name: Equipo de Desarrollo 4chan v2
+    email: dev@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.4chan-v2.example.com/api/v1
+    description: Servidor de producción
+  - url: https://staging-api.4chan-v2.example.com/api/v1
+    description: Servidor de staging
+  - url: http://localhost/api/v1
+    description: Servidor de desarrollo local
+
+tags:
+  - name: auth
+    description: Autenticación y gestión de usuarios
+  - name: boards
+    description: Gestión de tablones
+  - name: threads
+    description: Gestión de hilos
+  - name: posts
+    description: Gestión de posts
+  - name: files
+    description: Gestión de archivos
+  - name: moderation
+    description: Herramientas de moderación
+  - name: captcha
+    description: Sistema de CAPTCHA
+  - name: health
+    description: Estado del sistema
+
+paths:
+  /health:
+    get:
+      summary: Verificar estado del sistema
+      description: Endpoint para comprobar si la API está funcionando correctamente
+      tags:
+        - health
+      responses:
+        '200':
+          description: Sistema funcionando correctamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 1.0.0
+                  uptime:
+                    type: number
+                    example: 1234567
+
+  /auth/register:
+    post:
+      summary: Registrar nuevo usuario
+      description: Crea una nueva cuenta de usuario (solo para administradores/moderadores)
+      tags:
+        - auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+      responses:
+        '201':
+          description: Usuario creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Usuario ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      summary: Iniciar sesión
+      description: Autenticar un usuario y obtener tokens de acceso
+      tags:
+        - auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+      responses:
+        '200':
+          description: Autenticación exitosa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      summary: Refrescar token
+      description: Obtener un nuevo token de acceso usando el token de refresco
+      tags:
+        - auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refrescado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /boards:
+    get:
+      summary: Listar tablones
+      description: Obtiene la lista de todos los tablones disponibles
+      tags:
+        - boards
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: category
+          in: query
+          description: Filtrar por categoría
+          schema:
+            type: string
+        - name: includeNsfw
+          in: query
+          description: Incluir tablones NSFW en resultados
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Lista de tablones
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Board'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /boards/{boardId}:
+    get:
+      summary: Obtener tablón
+      description: Obtiene información detallada de un tablón específico
+      tags:
+        - boards
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      responses:
+        '200':
+          description: Detalles del tablón
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Board'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/threads:
+    get:
+      summary: Listar hilos de un tablón
+      description: Obtiene la lista de hilos activos en un tablón
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: page
+          in: query
+          description: Número de página a mostrar
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        '200':
+          description: Lista de hilos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Thread'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      summary: Crear nuevo hilo
+      description: Crea un nuevo hilo en el tablón especificado
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ThreadCreate'
+      responses:
+        '201':
+          description: Hilo creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Thread'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /boards/{boardId}/catalog:
+    get:
+      summary: Obtener catálogo del tablón
+      description: Obtiene una vista de catálogo con todos los hilos activos
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      responses:
+        '200':
+          description: Catálogo del tablón
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CatalogThread'
+                  meta:
+                    type: object
+                    properties:
+                      threadCount:
+                        type: integer
+                        example: 200
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/threads/{threadId}:
+    get:
+      summary: Obtener hilo completo
+      description: Obtiene un hilo con todos sus posts
+      tags:
+        - threads
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/PathThreadId'
+      responses:
+        '200':
+          description: Hilo completo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadWithPosts'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/threads/{threadId}/posts:
+    post:
+      summary: Responder a un hilo
+      description: Crea un nuevo post en el hilo especificado
+      tags:
+        - posts
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - $ref: '#/components/parameters/PathThreadId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PostCreate'
+      responses:
+        '201':
+          description: Post creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /boards/{boardId}/posts/{postId}/report:
+    post:
+      summary: Reportar post
+      description: Envía un reporte sobre un post
+      tags:
+        - moderation
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - name: postId
+          in: path
+          description: ID del post
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreate'
+      responses:
+        '201':
+          description: Reporte enviado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Report submitted successfully
+                  reportId:
+                    type: string
+                    example: 123e4567-e89b-12d3-a456-426614174000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /captcha:
+    get:
+      summary: Obtener CAPTCHA
+      description: Genera un nuevo CAPTCHA para verificación humana
+      tags:
+        - captcha
+      responses:
+        '200':
+          description: CAPTCHA generado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Captcha'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /files/upload:
+    post:
+      summary: Subir archivo
+      description: Sube un archivo al servidor para adjuntarlo a un post
+      tags:
+        - files
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Archivo subido exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          description: Archivo demasiado grande
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT de autenticación
+
+  parameters:
+    QueryLimit:
+      name: limit
+      in: query
+      description: Número máximo de elementos a devolver
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    QueryOffset:
+      name: offset
+      in: query
+      description: Número de elementos a saltar
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    PathBoardId:
+      name: boardId
+      in: path
+      description: ID del tablón
+      required: true
+      schema:
+        type: string
+
+    PathThreadId:
+      name: threadId
+      in: path
+      description: ID del hilo
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Solicitud invalida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: No autorizado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Prohibido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    TooManyRequests:
+      description: Demasiadas solicitudes
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Segundos a esperar antes de reintentar
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - statusCode
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: Bad Request
+        error:
+          type: string
+          example: Invalid input
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    PaginationMeta:
+      type: object
+      properties:
+        totalItems:
+          type: integer
+          example: 100
+        itemCount:
+          type: integer
+          example: 20
+        itemsPerPage:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 5
+        currentPage:
+          type: integer
+          example: 1
+
+    UserRegistration:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 20
+          example: moderator1
+        email:
+          type: string
+          format: email
+          example: mod@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: StrongPassword123!
+        role:
+          type: string
+          enum: [USER, JANITOR, MODERATOR, ADMIN]
+          default: USER
+          example: MODERATOR
+
+    UserLogin:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          example: moderator1
+        password:
+          type: string
+          format: password
+          example: StrongPassword123!
+
+    AuthResponse:
+      type: object
+      required:
+        - accessToken
+        - refreshToken
+        - user
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+              example: 123e4567-e89b-12d3-a456-426614174000
+            username:
+              type: string
+              example: moderator1
+            role:
+              type: string
+              enum: [USER, JANITOR, MODERATOR, ADMIN]
+              example: MODERATOR
+
+    Board:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          example: b
+        name:
+          type: string
+          example: Random
+        description:
+          type: string
+          example: Random discussion
+        isNsfw:
+          type: boolean
+          example: false
+        maxThreads:
+          type: integer
+          example: 200
+        cooldownThreads:
+          type: integer
+          example: 60
+        cooldownReplies:
+          type: integer
+          example: 30
+        category:
+          type: object
+          properties:
+            id:
+              type: string
+              example: 123e4567-e89b-12d3-a456-426614174000
+            name:
+              type: string
+              example: Japanese Culture
+
+    Thread:
+      type: object
+      required:
+        - id
+        - boardId
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        subject:
+          type: string
+          example: Thread subject
+        isSticky:
+          type: boolean
+          example: false
+        isLocked:
+          type: boolean
+          example: false
+        boardId:
+          type: string
+          example: b
+        createdAt:
+          type: string
+          format: date-time
+        bumpedAt:
+          type: string
+          format: date-time
+        replyCount:
+          type: integer
+          example: 42
+        fileCount:
+          type: integer
+          example: 15
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+          maxItems: 5
+          description: Primeros posts del hilo (original + algunas respuestas)
+
+    ThreadWithPosts:
+      allOf:
+        - $ref: '#/components/schemas/Thread'
+        - type: object
+          properties:
+            posts:
+              type: array
+              items:
+                $ref: '#/components/schemas/Post'
+              description: Todos los posts del hilo
+
+    CatalogThread:
+      type: object
+      required:
+        - id
+        - boardId
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        subject:
+          type: string
+          example: Thread subject
+        boardId:
+          type: string
+          example: b
+        createdAt:
+          type: string
+          format: date-time
+        bumpedAt:
+          type: string
+          format: date-time
+        replyCount:
+          type: integer
+          example: 42
+        fileCount:
+          type: integer
+          example: 15
+        isSticky:
+          type: boolean
+          example: false
+        isLocked:
+          type: boolean
+          example: false
+        excerpt:
+          type: string
+          example: This is the beginning of the thread text...
+        thumbnailUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/thumbnail.jpg
+
+    ThreadCreate:
+      type: object
+      required:
+        - message
+        - captchaId
+        - captchaSolution
+      properties:
+        subject:
+          type: string
+          maxLength: 100
+          example: This is a thread subject
+        message:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          example: This is the content of the thread
+        name:
+          type: string
+          maxLength: 100
+          default: Anonymous
+          example: Anonymous
+        file:
+          type: string
+          format: binary
+          description: Archivo a adjuntar (imagen/video)
+        captchaId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        captchaSolution:
+          type: string
+          example: a7x9p2
+
+    Post:
+      type: object
+      required:
+        - id
+        - threadId
+        - postNumber
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        threadId:
+          type: string
+          example: 987e6543-e21b-12d3-a456-426614174000
+        postNumber:
+          type: integer
+          example: 12345
+        name:
+          type: string
+          example: Anonymous
+        tripcode:
+          type: string
+          example: !AbCdEf123
+        message:
+          type: string
+          example: This is a post message
+        createdAt:
+          type: string
+          format: date-time
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+          maxItems: 5
+
+    PostCreate:
+      type: object
+      required:
+        - message
+        - captchaId
+        - captchaSolution
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 5000
+          example: This is a reply to the thread
+        name:
+          type: string
+          maxLength: 100
+          default: Anonymous
+          example: Anonymous
+        file:
+          type: string
+          format: binary
+          description: Archivo a adjuntar (imagen/video)
+        captchaId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        captchaSolution:
+          type: string
+          example: a7x9p2
+
+    File:
+      type: object
+      required:
+        - id
+        - filename
+        - filesize
+        - mimeType
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        filename:
+          type: string
+          example: example.jpg
+        filesize:
+          type: integer
+          example: 1234567
+        width:
+          type: integer
+          example: 1920
+        height:
+          type: integer
+          example: 1080
+        mimeType:
+          type: string
+          example: image/jpeg
+        thumbnailUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/thumbnail.jpg
+        fileUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/file.jpg
+        isSpoilered:
+          type: boolean
+          example: false
+        md5Hash:
+          type: string
+          example: 5d41402abc4b2a76b9719d911017c592
+
+    FileUploadResponse:
+      type: object
+      required:
+        - id
+        - fileUrl
+        - thumbnailUrl
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        fileUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/file.jpg
+        thumbnailUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/thumbnail.jpg
+        filename:
+          type: string
+          example: example.jpg
+        filesize:
+          type: integer
+          example: 1234567
+        width:
+          type: integer
+          example: 1920
+        height:
+          type: integer
+          example: 1080
+        mimeType:
+          type: string
+          example: image/jpeg
+
+    Captcha:
+      type: object
+      required:
+        - id
+        - imageUrl
+        - expiresAt
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        imageUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/captcha.jpg
+        expiresAt:
+          type: string
+          format: date-time
+
+    ReportCreate:
+      type: object
+      required:
+        - reason
+        - captchaId
+        - captchaSolution
+      properties:
+        reason:
+          type: string
+          enum: [ILLEGAL, SPAM, OFFENSIVE, OFF_TOPIC, OTHER]
+          example: SPAM
+        additionalInfo:
+          type: string
+          maxLength: 1000
+          example: This post contains unsolicited advertisements
+        captchaId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        captchaSolution:
+          type: string
+          example: a7x9p2
