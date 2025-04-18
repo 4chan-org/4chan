@@ -1,0 +1,277 @@
+version: '3.8'
+
+services:
+  # API Gateway - Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: 4chan_nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./v2/infrastructure/docker/nginx/conf.d:/etc/nginx/conf.d
+      - ./v2/infrastructure/docker/nginx/logs:/var/log/nginx
+    depends_on:
+      - shell
+      - auth-mf
+      - board-viewer-mf
+      - catalog-viewer-mf
+      - post-creator-mf
+      - api
+    networks:
+      - frontend
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Shell - Main Frontend Container
+  shell:
+    build:
+      context: ./v2/microfrontends/shell
+      dockerfile: Dockerfile
+      target: build # Use build target for development
+    container_name: 4chan_shell
+    volumes:
+      - ./v2/microfrontends/shell:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost/api
+      - VITE_AUTH_URL=http://localhost/auth
+      - VITE_FILES_URL=http://localhost/files
+    ports:
+      - "3000:3000" # For development server
+    networks:
+      - frontend
+    restart: unless-stopped
+    command: npm run dev
+
+  # Auth Microfrontend
+  auth-mf:
+    build:
+      context: ./v2/microfrontends/auth
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_auth_mf
+    volumes:
+      - ./v2/microfrontends/auth:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3001:3000" # For development server
+    networks:
+      - frontend
+    restart: unless-stopped
+    command: npm run dev
+
+  # Board Viewer Microfrontend
+  board-viewer-mf:
+    build:
+      context: ./v2/microfrontends/board-viewer
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_board_viewer_mf
+    volumes:
+      - ./v2/microfrontends/board-viewer:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3002:3000" # For development server
+    networks:
+      - frontend
+    restart: unless-stopped
+    command: npm run dev
+
+  # Catalog Viewer Microfrontend
+  catalog-viewer-mf:
+    build:
+      context: ./v2/microfrontends/catalog-viewer
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_catalog_viewer_mf
+    volumes:
+      - ./v2/microfrontends/catalog-viewer:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3003:3000" # For development server
+    networks:
+      - frontend
+    restart: unless-stopped
+    command: npm run dev
+
+  # Post Creator Microfrontend
+  post-creator-mf:
+    build:
+      context: ./v2/microfrontends/post-creator
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_post_creator_mf
+    volumes:
+      - ./v2/microfrontends/post-creator:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3004:3000" # For development server
+    networks:
+      - frontend
+    restart: unless-stopped
+    command: npm run dev
+
+  # Shared Library Microfrontend
+  shared-mf:
+    build:
+      context: ./v2/microfrontends/shared
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_shared_mf
+    volumes:
+      - ./v2/microfrontends/shared:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3005:3000" # For development server
+    networks:
+      - frontend
+    restart: unless-stopped
+    command: npm run dev
+
+  # Backend API
+  api:
+    build:
+      context: ./v2/api-core
+      dockerfile: Dockerfile
+      target: build
+    container_name: 4chan_api
+    volumes:
+      - ./v2/api-core:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/4chan?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=dev_jwt_secret_key_change_in_production
+      - JWT_REFRESH_SECRET=dev_refresh_secret_key_change_in_production
+      - FILE_STORAGE_TYPE=local
+    ports:
+      - "3100:3000" # API port
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - backend
+    restart: unless-stopped
+    command: npm run start:dev
+
+  # File Service 
+  files:
+    build:
+      context: ./v2/file-service
+      dockerfile: Dockerfile
+    container_name: 4chan_files
+    volumes:
+      - ./v2/file-service:/app
+      - ./uploads:/app/uploads
+    environment:
+      - GO_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=4chan
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=dev_jwt_secret_key_change_in_production
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - UPLOADS_PATH=/app/uploads
+    ports:
+      - "3200:8080" # Files service port
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    networks:
+      - backend
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: 4chan_postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: 4chan
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: 4chan_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # MinIO (S3 compatible object storage)
+  minio:
+    image: minio/minio:latest
+    container_name: 4chan_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server --console-address ":9001" /data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
