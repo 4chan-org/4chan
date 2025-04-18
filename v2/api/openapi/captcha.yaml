@@ -1,0 +1,450 @@
+openapi: 3.1.0
+info:
+  title: 4chan v2 CAPTCHA API
+  version: 1.0.0
+  description: |
+    API para la generación y verificación de CAPTCHAs en 4chan v2, proporcionando mecanismos para proteger contra bots y spam.
+  contact:
+    name: Equipo de Desarrollo 4chan v2
+    email: dev@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.4chan-v2.example.com/api/v1
+    description: Servidor de producción
+  - url: https://staging-api.4chan-v2.example.com/api/v1
+    description: Servidor de staging
+  - url: http://localhost/api/v1
+    description: Servidor de desarrollo local
+
+tags:
+  - name: captcha
+    description: Operaciones con CAPTCHA
+
+paths:
+  /captcha:
+    get:
+      summary: Obtener CAPTCHA
+      description: |
+        Genera un nuevo CAPTCHA para verificación humana. El CAPTCHA puede ser de tipo imagen o audio, 
+        dependiendo de las necesidades de accesibilidad.
+      tags:
+        - captcha
+      parameters:
+        - name: type
+          in: query
+          description: Tipo de CAPTCHA
+          schema:
+            type: string
+            enum: [image, audio]
+            default: image
+        - name: difficulty
+          in: query
+          description: Nivel de dificultad del CAPTCHA
+          schema:
+            type: string
+            enum: [easy, normal, hard]
+            default: normal
+      responses:
+        '200':
+          description: CAPTCHA generado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Captcha'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /captcha/{captchaId}:
+    get:
+      summary: Obtener CAPTCHA por ID
+      description: |
+        Recupera un CAPTCHA existente por su ID. Útil si el usuario necesita 
+        volver a cargar el CAPTCHA sin generar uno nuevo.
+      tags:
+        - captcha
+      parameters:
+        - name: captchaId
+          in: path
+          required: true
+          description: ID del CAPTCHA
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CAPTCHA recuperado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Captcha'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /captcha/verify:
+    post:
+      summary: Verificar CAPTCHA
+      description: |
+        Verifica la solución proporcionada para un CAPTCHA específico. 
+        Esta verificación es necesaria antes de realizar acciones como 
+        crear hilos, posts o reportes.
+      tags:
+        - captcha
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - captchaId
+                - solution
+              properties:
+                captchaId:
+                  type: string
+                  description: ID del CAPTCHA
+                  example: 123e4567-e89b-12d3-a456-426614174000
+                solution:
+                  type: string
+                  description: Solución proporcionada por el usuario
+                  example: a7x9p2
+      responses:
+        '200':
+          description: Resultado de la verificación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: CAPTCHA verification successful
+                  token:
+                    type: string
+                    description: Token que puede usarse para validar acciones posteriores
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          description: Verificación fallida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: Incorrect CAPTCHA solution
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /captcha/audio/{captchaId}:
+    get:
+      summary: Obtener versión de audio del CAPTCHA
+      description: |
+        Obtiene la versión de audio de un CAPTCHA para accesibilidad. 
+        Útil para usuarios con discapacidades visuales.
+      tags:
+        - captcha
+      parameters:
+        - name: captchaId
+          in: path
+          required: true
+          description: ID del CAPTCHA
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Audio del CAPTCHA
+          content:
+            audio/mp3:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /captcha/stats:
+    get:
+      summary: Obtener estadísticas de CAPTCHA
+      description: |
+        Obtiene estadísticas sobre el uso y efectividad de los CAPTCHAs. 
+        Esta información es útil para monitorear la efectividad del sistema 
+        contra bots y ajustar configuraciones.
+      tags:
+        - captcha
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Estadísticas de CAPTCHA
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalCaptchasGenerated:
+                    type: integer
+                    example: 100000
+                  successRate:
+                    type: number
+                    format: float
+                    example: 0.85
+                  averageSolveTime:
+                    type: number
+                    format: float
+                    example: 8.5
+                  captchasByType:
+                    type: object
+                    properties:
+                      image:
+                        type: integer
+                        example: 95000
+                      audio:
+                        type: integer
+                        example: 5000
+                  captchasByDifficulty:
+                    type: object
+                    properties:
+                      easy:
+                        type: integer
+                        example: 10000
+                      normal:
+                        type: integer
+                        example: 80000
+                      hard:
+                        type: integer
+                        example: 10000
+                  recentFailedIps:
+                    type: integer
+                    example: 150
+                  period:
+                    type: string
+                    example: 24h
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /captcha/config:
+    get:
+      summary: Obtener configuración de CAPTCHA
+      description: |
+        Obtiene la configuración actual del sistema de CAPTCHA. 
+        Esta configuración incluye detalles como umbrales de activación, 
+        niveles de dificultad, etc.
+      tags:
+        - captcha
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Configuración de CAPTCHA
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                    example: true
+                  defaultDifficulty:
+                    type: string
+                    example: normal
+                  expirationMinutes:
+                    type: integer
+                    example: 15
+                  requiredForNewThreads:
+                    type: boolean
+                    example: true
+                  requiredForNewPosts:
+                    type: boolean
+                    example: false
+                  postThreshold:
+                    type: integer
+                    example: 3
+                    description: Número de posts antes de requerir CAPTCHA
+                  reuseLimit:
+                    type: integer
+                    example: 1
+                    description: Veces que se puede usar un token de CAPTCHA
+                  adaptiveDifficulty:
+                    type: boolean
+                    example: true
+                    description: Si la dificultad aumenta con intentos fallidos
+                  audioEnabled:
+                    type: boolean
+                    example: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      summary: Actualizar configuración de CAPTCHA
+      description: |
+        Actualiza la configuración del sistema de CAPTCHA. 
+        Esta operación requiere privilegios administrativos.
+      tags:
+        - captcha
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                defaultDifficulty:
+                  type: string
+                  enum: [easy, normal, hard]
+                expirationMinutes:
+                  type: integer
+                  minimum: 5
+                  maximum: 60
+                requiredForNewThreads:
+                  type: boolean
+                requiredForNewPosts:
+                  type: boolean
+                postThreshold:
+                  type: integer
+                  minimum: 0
+                reuseLimit:
+                  type: integer
+                  minimum: 1
+                adaptiveDifficulty:
+                  type: boolean
+                audioEnabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Configuración actualizada exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: CAPTCHA configuration updated successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT de autenticación
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: No autorizado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Prohibido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    TooManyRequests:
+      description: Demasiadas solicitudes
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Segundos a esperar antes de reintentar
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - statusCode
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: Bad Request
+        error:
+          type: string
+          example: Invalid input
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    Captcha:
+      type: object
+      required:
+        - id
+        - imageUrl
+        - expiresAt
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        imageUrl:
+          type: string
+          format: uri
+          example: https://example.com/captcha/image/123e4567-e89b-12d3-a456-426614174000
+        audioUrl:
+          type: string
+          format: uri
+          example: https://example.com/captcha/audio/123e4567-e89b-12d3-a456-426614174000
+        expiresAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum: [image, audio]
+          example: image
+        difficulty:
+          type: string
+          enum: [easy, normal, hard]
+          example: normal

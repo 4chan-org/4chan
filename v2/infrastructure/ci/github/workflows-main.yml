@@ -1,0 +1,261 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, staging, develop ]
+  pull_request:
+    branches: [ main, staging, develop ]
+
+jobs:
+  # Job para verificar el código (linting, tipos, etc.)
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          cd v2/backend
+          npm ci
+          cd ../frontend
+          npm ci
+      
+      - name: Lint Backend
+        run: |
+          cd v2/backend
+          npm run lint
+      
+      - name: Lint Frontend
+        run: |
+          cd v2/frontend
+          npm run lint
+      
+      - name: TypeCheck Backend
+        run: |
+          cd v2/backend
+          npm run prisma:generate
+          npx tsc --noEmit
+      
+      - name: TypeCheck Frontend
+        run: |
+          cd v2/frontend
+          npm run typecheck
+
+  # Job para ejecutar tests
+  test:
+    runs-on: ubuntu-latest
+    needs: validate
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          cd v2/backend
+          npm ci
+          cd ../frontend
+          npm ci
+      
+      - name: Setup test database
+        run: |
+          cd v2/backend
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db?schema=public" > .env.test
+          npm run prisma:generate
+          DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db?schema=public npm run prisma:migrate
+      
+      - name: Run backend tests
+        run: |
+          cd v2/backend
+          npm run test
+      
+      - name: Run frontend tests
+        run: |
+          cd v2/frontend
+          npm run test
+
+  # Job para escaneo de seguridad
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: |
+          cd v2/backend
+          npm ci --ignore-scripts
+          cd ../frontend
+          npm ci --ignore-scripts
+      
+      - name: Run npm audit (Backend)
+        run: |
+          cd v2/backend
+          npm audit --audit-level=high || true
+      
+      - name: Run npm audit (Frontend)
+        run: |
+          cd v2/frontend
+          npm audit --audit-level=high || true
+      
+      - name: Run SAST scan
+        uses: github/codeql-action/analyze@v2
+        with:
+          languages: javascript, typescript
+      
+      - name: Run Dependency Scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  # Job para construir y publicar imágenes Docker
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, security-scan]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Login to Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=sha,format=short
+      
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./v2/backend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-backend
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./v2/frontend
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}-frontend
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Job para desplegar en entorno de staging
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+      
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+      
+      - name: Update deployment images
+        run: |
+          cd v2/infrastructure/kubernetes/overlays/staging
+          kustomize edit set image ghcr.io/backend=ghcr.io/${{ github.repository }}-backend:${{ github.sha }}
+          kustomize edit set image ghcr.io/frontend=ghcr.io/${{ github.repository }}-frontend:${{ github.sha }}
+      
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -k v2/infrastructure/kubernetes/overlays/staging
+          kubectl rollout status deployment/frontend-deployment -n 4chan-staging
+          kubectl rollout status deployment/backend-deployment -n 4chan-staging
+
+  # Job para desplegar en entorno de producción
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+      
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+      
+      - name: Update deployment images
+        run: |
+          cd v2/infrastructure/kubernetes/overlays/production
+          kustomize edit set image ghcr.io/backend=ghcr.io/${{ github.repository }}-backend:${{ github.sha }}
+          kustomize edit set image ghcr.io/frontend=ghcr.io/${{ github.repository }}-frontend:${{ github.sha }}
+      
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -k v2/infrastructure/kubernetes/overlays/production
+          kubectl rollout status deployment/frontend-deployment -n 4chan-production
+          kubectl rollout status deployment/backend-deployment -n 4chan-production

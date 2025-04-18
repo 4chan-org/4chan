@@ -1,0 +1,526 @@
+openapi: 3.1.0
+info:
+  title: 4chan v2 Files API
+  version: 1.0.0
+  description: |
+    API para la gestión de archivos en 4chan v2, proporcionando endpoints para subir, procesar y recuperar archivos de manera segura.
+  contact:
+    name: Equipo de Desarrollo 4chan v2
+    email: dev@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.4chan-v2.example.com/api/v1
+    description: Servidor de producción
+  - url: https://staging-api.4chan-v2.example.com/api/v1
+    description: Servidor de staging
+  - url: http://localhost/api/v1
+    description: Servidor de desarrollo local
+
+tags:
+  - name: files
+    description: Operaciones con archivos
+  - name: thumbnails
+    description: Generación y recuperación de miniaturas
+  - name: storage
+    description: Gestión de almacenamiento de archivos
+
+paths:
+  /files/upload:
+    post:
+      summary: Subir archivo
+      description: |
+        Sube un archivo al servidor para adjuntarlo a un post. El archivo pasa por un proceso de 
+        validación de seguridad y generación de miniaturas antes de ser almacenado.
+      tags:
+        - files
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo a subir (imagen, gif, video, etc.)
+                spoiler:
+                  type: boolean
+                  default: false
+                  description: Indica si el archivo debe tratarse como spoiler
+      responses:
+        '201':
+          description: Archivo subido exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          description: Archivo demasiado grande
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          description: Tipo de archivo no soportado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /files/{fileId}:
+    get:
+      summary: Obtener información de archivo
+      description: Obtiene metadatos de un archivo específico
+      tags:
+        - files
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          description: ID del archivo
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Información del archivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/File'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar archivo
+      description: Elimina un archivo del sistema
+      tags:
+        - files
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          description: ID del archivo
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Archivo eliminado exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /files/{fileId}/content:
+    get:
+      summary: Obtener contenido de archivo
+      description: Descarga el contenido binario del archivo
+      tags:
+        - files
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          description: ID del archivo
+          schema:
+            type: string
+        - name: download
+          in: query
+          description: Si se debe descargar el archivo o mostrarlo en el navegador
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Contenido del archivo
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /files/{fileId}/thumbnail:
+    get:
+      summary: Obtener miniatura de archivo
+      description: Descarga la miniatura del archivo
+      tags:
+        - thumbnails
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          description: ID del archivo
+          schema:
+            type: string
+        - name: size
+          in: query
+          description: Tamaño de la miniatura
+          schema:
+            type: string
+            enum: [small, medium, large]
+            default: medium
+      responses:
+        '200':
+          description: Miniatura del archivo
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /files/check:
+    post:
+      summary: Verificar archivo
+      description: |
+        Verifica si un archivo ya existe en el sistema basado en su hash MD5. 
+        Útil para evitar subir duplicados.
+      tags:
+        - files
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - md5Hash
+              properties:
+                md5Hash:
+                  type: string
+                  description: Hash MD5 del archivo
+                  example: 5d41402abc4b2a76b9719d911017c592
+      responses:
+        '200':
+          description: Resultado de la verificación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                    example: true
+                  file:
+                    $ref: '#/components/schemas/File'
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /files/banned:
+    get:
+      summary: Obtener hashes de archivos prohibidos
+      description: |
+        Obtiene una lista de hashes MD5 de archivos prohibidos. 
+        Útil para verificación en el cliente antes de subir.
+      tags:
+        - files
+      responses:
+        '200':
+          description: Lista de hashes de archivos prohibidos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: string
+                      example: 5d41402abc4b2a76b9719d911017c592
+                  updatedAt:
+                    type: string
+                    format: date-time
+
+  /files/stats:
+    get:
+      summary: Obtener estadísticas de archivos
+      description: Obtiene estadísticas generales sobre los archivos almacenados
+      tags:
+        - storage
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Estadísticas de archivos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalFiles:
+                    type: integer
+                    example: 1000000
+                  totalSize:
+                    type: integer
+                    example: 5368709120
+                  filesByType:
+                    type: object
+                    additionalProperties:
+                      type: integer
+                    example:
+                      image/jpeg: 500000
+                      image/png: 300000
+                      image/gif: 150000
+                      video/mp4: 50000
+                  averageFileSize:
+                    type: integer
+                    example: 5368709
+                  filesLastDay:
+                    type: integer
+                    example: 10000
+                  filesLastWeek:
+                    type: integer
+                    example: 70000
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /files/admin/purge:
+    post:
+      summary: Purgar archivos antiguos
+      description: |
+        Inicia una tarea para purgar archivos antiguos según criterios específicos.
+        Esta operación es asíncrona y puede tardar tiempo en completarse.
+      tags:
+        - storage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - olderThanDays
+              properties:
+                olderThanDays:
+                  type: integer
+                  minimum: 30
+                  example: 90
+                  description: Purgar archivos más antiguos que estos días
+                mimeTypes:
+                  type: array
+                  items:
+                    type: string
+                  example: ["image/gif", "video/mp4"]
+                  description: Tipos MIME específicos a purgar (opcional)
+                exceptBoardIds:
+                  type: array
+                  items:
+                    type: string
+                  example: ["a", "h"]
+                  description: IDs de tablones a excluir de la purga
+                dryRun:
+                  type: boolean
+                  default: false
+                  description: Si es verdadero, muestra qué se purgaría sin realizar cambios
+      security:
+        - BearerAuth: []
+      responses:
+        '202':
+          description: Tarea de purga iniciada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  taskId:
+                    type: string
+                    example: 123e4567-e89b-12d3-a456-426614174000
+                  estimatedFilesToPurge:
+                    type: integer
+                    example: 50000
+                  estimatedSpaceToFree:
+                    type: integer
+                    example: 268435456
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT de autenticación
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: No autorizado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Prohibido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    TooManyRequests:
+      description: Demasiadas solicitudes
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Segundos a esperar antes de reintentar
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - statusCode
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: Bad Request
+        error:
+          type: string
+          example: Invalid input
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        filename:
+          type: string
+          example: example.jpg
+        storedFilename:
+          type: string
+          example: 1662547890_abcdef123456.jpg
+        filesize:
+          type: integer
+          example: 1234567
+        width:
+          type: integer
+          nullable: true
+          example: 1920
+        height:
+          type: integer
+          nullable: true
+          example: 1080
+        thumbnailFilename:
+          type: string
+          example: 1662547890_abcdef123456_thumb.jpg
+        mimeType:
+          type: string
+          example: image/jpeg
+        md5Hash:
+          type: string
+          example: 5d41402abc4b2a76b9719d911017c592
+        sha256Hash:
+          type: string
+          example: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        isSpoilered:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+        postId:
+          type: string
+          example: 987e6543-e21b-12d3-a456-426614174000
+        fileUrl:
+          type: string
+          format: uri
+          example: https://example.com/files/123e4567-e89b-12d3-a456-426614174000/content
+        thumbnailUrl:
+          type: string
+          format: uri
+          example: https://example.com/files/123e4567-e89b-12d3-a456-426614174000/thumbnail
+
+    FileUploadResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        fileUrl:
+          type: string
+          format: uri
+          example: https://example.com/files/123e4567-e89b-12d3-a456-426614174000/content
+        thumbnailUrl:
+          type: string
+          format: uri
+          example: https://example.com/files/123e4567-e89b-12d3-a456-426614174000/thumbnail
+        filename:
+          type: string
+          example: example.jpg
+        filesize:
+          type: integer
+          example: 1234567
+        width:
+          type: integer
+          nullable: true
+          example: 1920
+        height:
+          type: integer
+          nullable: true
+          example: 1080
+        mimeType:
+          type: string
+          example: image/jpeg
+        md5Hash:
+          type: string
+          example: 5d41402abc4b2a76b9719d911017c592
+        isSpoilered:
+          type: boolean
+          example: false
+        uploadDuration:
+          type: integer
+          example: 1234
+          description: Duración de la subida en milisegundos

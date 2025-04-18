@@ -1,0 +1,1384 @@
+openapi: 3.1.0
+info:
+  title: 4chan v2 Moderator API
+  version: 1.0.0
+  description: |
+    API para las operaciones de moderación de 4chan v2, proporcionando endpoints para la gestión de reportes, baneos, y otras funciones administrativas.
+  contact:
+    name: Equipo de Desarrollo 4chan v2
+    email: dev@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.4chan-v2.example.com/api/v1
+    description: Servidor de producción
+  - url: https://staging-api.4chan-v2.example.com/api/v1
+    description: Servidor de staging
+  - url: http://localhost/api/v1
+    description: Servidor de desarrollo local
+
+tags:
+  - name: reports
+    description: Gestión de reportes de contenido
+  - name: bans
+    description: Gestión de baneos de usuarios
+  - name: mod-logs
+    description: Logs de acciones de moderación
+  - name: wordfilters
+    description: Gestión de filtros de palabras
+  - name: admin
+    description: Funciones administrativas avanzadas
+
+paths:
+  /moderation/reports:
+    get:
+      summary: Listar reportes
+      description: Obtiene la lista de reportes pendientes o resueltos
+      tags:
+        - reports
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: status
+          in: query
+          description: Estado de los reportes a obtener
+          schema:
+            type: string
+            enum: [pending, resolved, all]
+            default: pending
+        - name: boardId
+          in: query
+          description: Filtrar por tablón
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de reportes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReportWithDetails'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /moderation/reports/{reportId}:
+    get:
+      summary: Obtener reporte
+      description: Obtiene los detalles de un reporte específico
+      tags:
+        - reports
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          description: ID del reporte
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Detalles del reporte
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportWithDetails'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Gestionar reporte
+      description: Resuelve o rechaza un reporte
+      tags:
+        - reports
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          description: ID del reporte
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [resolve, reject]
+                  description: Acción a realizar
+                notes:
+                  type: string
+                  description: Notas del moderador
+                banUser:
+                  type: boolean
+                  description: Si se debe banear al usuario que hizo el post
+                deleteContent:
+                  type: boolean
+                  description: Si se debe eliminar el contenido reportado
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Reporte gestionado exitosamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Report processed successfully
+                  report:
+                    $ref: '#/components/schemas/Report'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /moderation/bans:
+    get:
+      summary: Listar baneos
+      description: Obtiene la lista de baneos activos o históricos
+      tags:
+        - bans
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: status
+          in: query
+          description: Estado de los baneos a obtener
+          schema:
+            type: string
+            enum: [active, expired, all]
+            default: active
+        - name: boardId
+          in: query
+          description: Filtrar por tablón
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de baneos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Ban'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: Crear baneo
+      description: Crea un nuevo baneo para una IP
+      tags:
+        - bans
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ip
+                - reason
+              properties:
+                ip:
+                  type: string
+                  description: Dirección IP a banear
+                reason:
+                  type: string
+                  description: Razón del baneo
+                duration:
+                  type: integer
+                  description: Duración del baneo en minutos (0 para permanente)
+                  default: 1440
+                boardId:
+                  type: string
+                  description: ID del tablón (null para baneo global)
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Baneo creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ban'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /moderation/bans/{banId}:
+    get:
+      summary: Obtener baneo
+      description: Obtiene los detalles de un baneo específico
+      tags:
+        - bans
+      parameters:
+        - name: banId
+          in: path
+          required: true
+          description: ID del baneo
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Detalles del baneo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ban'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Actualizar baneo
+      description: Actualiza un baneo existente
+      tags:
+        - bans
+      parameters:
+        - name: banId
+          in: path
+          required: true
+          description: ID del baneo
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Nueva razón del baneo
+                duration:
+                  type: integer
+                  description: Nueva duración del baneo en minutos
+                isActive:
+                  type: boolean
+                  description: Si el baneo está activo
+                appealStatus:
+                  type: string
+                  enum: [NONE, PENDING, APPROVED, DENIED]
+                  description: Estado de la apelación
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Baneo actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ban'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar baneo
+      description: Elimina un baneo existente
+      tags:
+        - bans
+      parameters:
+        - name: banId
+          in: path
+          required: true
+          description: ID del baneo
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Baneo eliminado exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /moderation/logs:
+    get:
+      summary: Obtener logs de moderación
+      description: Obtiene el registro de acciones de moderación
+      tags:
+        - mod-logs
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: userId
+          in: query
+          description: Filtrar por ID de usuario
+          schema:
+            type: string
+        - name: action
+          in: query
+          description: Filtrar por tipo de acción
+          schema:
+            type: string
+        - name: boardId
+          in: query
+          description: Filtrar por tablón
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          description: Fecha de inicio (formato ISO)
+          schema:
+            type: string
+            format: date-time
+        - name: toDate
+          in: query
+          description: Fecha de fin (formato ISO)
+          schema:
+            type: string
+            format: date-time
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Registro de acciones de moderación
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLog'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /moderation/wordfilters:
+    get:
+      summary: Listar filtros de palabras
+      description: Obtiene la lista de filtros de palabras configurados
+      tags:
+        - wordfilters
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: boardId
+          in: query
+          description: Filtrar por tablón
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          description: Filtrar por estado activo
+          schema:
+            type: boolean
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de filtros de palabras
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WordFilter'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: Crear filtro de palabras
+      description: Crea un nuevo filtro de palabras
+      tags:
+        - wordfilters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pattern
+                - replacement
+              properties:
+                pattern:
+                  type: string
+                  description: Patrón a filtrar
+                replacement:
+                  type: string
+                  description: Texto de reemplazo
+                isRegex:
+                  type: boolean
+                  description: Si el patrón es una expresión regular
+                  default: false
+                isActive:
+                  type: boolean
+                  description: Si el filtro está activo
+                  default: true
+                boardId:
+                  type: string
+                  description: ID del tablón (null para filtro global)
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Filtro creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordFilter'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /moderation/wordfilters/{filterId}:
+    get:
+      summary: Obtener filtro de palabras
+      description: Obtiene los detalles de un filtro de palabras específico
+      tags:
+        - wordfilters
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          description: ID del filtro
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Detalles del filtro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordFilter'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Actualizar filtro de palabras
+      description: Actualiza un filtro de palabras existente
+      tags:
+        - wordfilters
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          description: ID del filtro
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pattern:
+                  type: string
+                  description: Patrón a filtrar
+                replacement:
+                  type: string
+                  description: Texto de reemplazo
+                isRegex:
+                  type: boolean
+                  description: Si el patrón es una expresión regular
+                isActive:
+                  type: boolean
+                  description: Si el filtro está activo
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Filtro actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WordFilter'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar filtro de palabras
+      description: Elimina un filtro de palabras existente
+      tags:
+        - wordfilters
+      parameters:
+        - name: filterId
+          in: path
+          required: true
+          description: ID del filtro
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Filtro eliminado exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/users:
+    get:
+      summary: Listar usuarios
+      description: Obtiene la lista de usuarios (moderadores, administradores)
+      tags:
+        - admin
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: role
+          in: query
+          description: Filtrar por rol
+          schema:
+            type: string
+            enum: [USER, JANITOR, MODERATOR, ADMIN]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserSafe'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      summary: Crear usuario
+      description: Crea un nuevo usuario (moderador, administrador)
+      tags:
+        - admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - email
+                - password
+                - role
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 20
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [USER, JANITOR, MODERATOR, ADMIN]
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Usuario creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSafe'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Usuario ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/users/{userId}:
+    get:
+      summary: Obtener usuario
+      description: Obtiene los detalles de un usuario específico
+      tags:
+        - admin
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID del usuario
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Detalles del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSafe'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Actualizar usuario
+      description: Actualiza un usuario existente
+      tags:
+        - admin
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID del usuario
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 20
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [USER, JANITOR, MODERATOR, ADMIN]
+                isActive:
+                  type: boolean
+                twoFactorAuth:
+                  type: boolean
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Usuario actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSafe'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar usuario
+      description: Elimina un usuario existente
+      tags:
+        - admin
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          description: ID del usuario
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Usuario eliminado exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/boards:
+    post:
+      summary: Crear tablón
+      description: Crea un nuevo tablón
+      tags:
+        - admin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - name
+                - categoryId
+              properties:
+                id:
+                  type: string
+                  description: Código corto del tablón (ej. "b", "pol")
+                  minLength: 1
+                  maxLength: 10
+                name:
+                  type: string
+                  description: Nombre del tablón
+                  minLength: 1
+                  maxLength: 50
+                description:
+                  type: string
+                  description: Descripción del tablón
+                  maxLength: 500
+                isNsfw:
+                  type: boolean
+                  default: false
+                maxThreads:
+                  type: integer
+                  default: 200
+                maxReportsPerHour:
+                  type: integer
+                  default: 10
+                bumpLimit:
+                  type: integer
+                  default: 300
+                cooldownThreads:
+                  type: integer
+                  default: 60
+                cooldownReplies:
+                  type: integer
+                  default: 30
+                categoryId:
+                  type: string
+                  description: ID de la categoría a la que pertenece el tablón
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Tablón creado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Board'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: El tablón ya existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /admin/boards/{boardId}:
+    put:
+      summary: Actualizar tablón
+      description: Actualiza un tablón existente
+      tags:
+        - admin
+      parameters:
+        - name: boardId
+          in: path
+          required: true
+          description: ID del tablón
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Nombre del tablón
+                  minLength: 1
+                  maxLength: 50
+                description:
+                  type: string
+                  description: Descripción del tablón
+                  maxLength: 500
+                isNsfw:
+                  type: boolean
+                isArchived:
+                  type: boolean
+                maxThreads:
+                  type: integer
+                maxReportsPerHour:
+                  type: integer
+                bumpLimit:
+                  type: integer
+                cooldownThreads:
+                  type: integer
+                cooldownReplies:
+                  type: integer
+                categoryId:
+                  type: string
+                  description: ID de la categoría a la que pertenece el tablón
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Tablón actualizado exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Board'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Eliminar tablón
+      description: Elimina un tablón existente
+      tags:
+        - admin
+      parameters:
+        - name: boardId
+          in: path
+          required: true
+          description: ID del tablón
+          schema:
+            type: string
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Tablón eliminado exitosamente
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT de autenticación
+
+  parameters:
+    QueryLimit:
+      name: limit
+      in: query
+      description: Número máximo de elementos a devolver
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    QueryOffset:
+      name: offset
+      in: query
+      description: Número de elementos a saltar
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: No autorizado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Prohibido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - statusCode
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: Bad Request
+        error:
+          type: string
+          example: Invalid input
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    PaginationMeta:
+      type: object
+      properties:
+        totalItems:
+          type: integer
+          example: 100
+        itemCount:
+          type: integer
+          example: 20
+        itemsPerPage:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 5
+        currentPage:
+          type: integer
+          example: 1
+
+    UserSafe:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        username:
+          type: string
+          example: moderator1
+        role:
+          type: string
+          enum: [USER, JANITOR, MODERATOR, ADMIN]
+          example: MODERATOR
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        reason:
+          type: string
+          enum: [ILLEGAL, SPAM, OFFENSIVE, OFF_TOPIC, OTHER]
+          example: SPAM
+        additionalInfo:
+          type: string
+          nullable: true
+          example: This post contains unsolicited advertisements
+        isResolved:
+          type: boolean
+          example: false
+        resolvedBy:
+          type: string
+          nullable: true
+          example: 456e6789-e89b-12d3-a456-426614174000
+        createdAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        postId:
+          type: string
+          nullable: true
+          example: 987e6543-e21b-12d3-a456-426614174000
+        threadId:
+          type: string
+          nullable: true
+          example: 654e9876-e21b-12d3-a456-426614174000
+
+    ReportWithDetails:
+      allOf:
+        - $ref: '#/components/schemas/Report'
+        - type: object
+          properties:
+            post:
+              $ref: '#/components/schemas/Post'
+              nullable: true
+            thread:
+              $ref: '#/components/schemas/Thread'
+              nullable: true
+            boardId:
+              type: string
+              example: b
+
+    Ban:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        reason:
+          type: string
+          nullable: true
+          example: Spamming multiple threads
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Null para baneos permanentes
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          example: 456e6789-e89b-12d3-a456-426614174000
+        boardId:
+          type: string
+          nullable: true
+          example: b
+          description: Null para baneos globales
+        appealReason:
+          type: string
+          nullable: true
+          example: I didn't realize I was breaking the rules
+        appealStatus:
+          type: string
+          enum: [NONE, PENDING, APPROVED, DENIED]
+          example: NONE
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        action:
+          type: string
+          example: DELETE_POST
+        entityType:
+          type: string
+          example: POST
+        entityId:
+          type: string
+          example: 987e6543-e21b-12d3-a456-426614174000
+        details:
+          type: object
+          example: {"reason": "Violating board rules", "boardId": "b"}
+        createdAt:
+          type: string
+          format: date-time
+        userId:
+          type: string
+          nullable: true
+          example: 456e6789-e89b-12d3-a456-426614174000
+
+    WordFilter:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        pattern:
+          type: string
+          example: "badword"
+        replacement:
+          type: string
+          example: "****"
+        isRegex:
+          type: boolean
+          example: false
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        boardId:
+          type: string
+          nullable: true
+          example: b
+          description: Null para filtros globales
+
+    Board:
+      type: object
+      properties:
+        id:
+          type: string
+          example: b
+        name:
+          type: string
+          example: Random
+        description:
+          type: string
+          nullable: true
+          example: Random discussion
+        isNsfw:
+          type: boolean
+          example: false
+        isArchived:
+          type: boolean
+          example: false
+        maxThreads:
+          type: integer
+          example: 200
+        maxReportsPerHour:
+          type: integer
+          example: 10
+        bumpLimit:
+          type: integer
+          example: 300
+        cooldownThreads:
+          type: integer
+          example: 60
+        cooldownReplies:
+          type: integer
+          example: 30
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        categoryId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+
+    Thread:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        subject:
+          type: string
+          nullable: true
+          example: Thread subject
+        isSticky:
+          type: boolean
+          example: false
+        isLocked:
+          type: boolean
+          example: false
+        isCyclic:
+          type: boolean
+          example: false
+        cycleLimit:
+          type: integer
+          nullable: true
+          example: 500
+        bumpedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        boardId:
+          type: string
+          example: b
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        postNumber:
+          type: integer
+          example: 12345
+        name:
+          type: string
+          nullable: true
+          example: Anonymous
+        tripcode:
+          type: string
+          nullable: true
+          example: !AbCdEf123
+        message:
+          type: string
+          nullable: true
+          example: This is a post message
+        isDeleted:
+          type: boolean
+          example: false
+        isSpoilered:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        threadId:
+          type: string
+          example: 987e6543-e21b-12d3-a456-426614174000
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/File'
+
+    File:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        filename:
+          type: string
+          example: example.jpg
+        filesize:
+          type: integer
+          example: 1234567
+        width:
+          type: integer
+          nullable: true
+          example: 1920
+        height:
+          type: integer
+          nullable: true
+          example: 1080
+        mimeType:
+          type: string
+          example: image/jpeg
+        thumbnailUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/thumbnail.jpg
+        fileUrl:
+          type: string
+          format: uri
+          example: https://example.com/path/to/file.jpg
+        isSpoilered:
+          type: boolean
+          example: false
+        md5Hash:
+          type: string
+          example: 5d41402abc4b2a76b9719d911017c592
