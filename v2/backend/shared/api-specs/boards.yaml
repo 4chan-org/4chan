@@ -1,0 +1,668 @@
+openapi: 3.1.0
+info:
+  title: 4chan v2 Boards API
+  version: 1.0.0
+  description: |
+    API para la gestión de tablones en 4chan v2, proporcionando endpoints para listar, buscar y recuperar información sobre los tablones.
+  contact:
+    name: Equipo de Desarrollo 4chan v2
+    email: dev@example.com
+  license:
+    name: MIT
+servers:
+  - url: https://api.4chan-v2.example.com/api/v1
+    description: Servidor de producción
+  - url: https://staging-api.4chan-v2.example.com/api/v1
+    description: Servidor de staging
+  - url: http://localhost/api/v1
+    description: Servidor de desarrollo local
+
+tags:
+  - name: boards
+    description: Operaciones con tablones
+  - name: categories
+    description: Operaciones con categorías de tablones
+  - name: settings
+    description: Configuración de tablones
+
+paths:
+  /boards:
+    get:
+      summary: Listar tablones
+      description: Obtiene la lista de todos los tablones disponibles
+      tags:
+        - boards
+      parameters:
+        - $ref: '#/components/parameters/QueryLimit'
+        - $ref: '#/components/parameters/QueryOffset'
+        - name: category
+          in: query
+          description: Filtrar por categoría
+          schema:
+            type: string
+        - name: includeNsfw
+          in: query
+          description: Incluir tablones NSFW en resultados
+          schema:
+            type: boolean
+            default: false
+        - name: includeArchived
+          in: query
+          description: Incluir tablones archivados
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Lista de tablones
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BoardWithCategory'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+
+  /boards/{boardId}:
+    get:
+      summary: Obtener tablón
+      description: Obtiene información detallada de un tablón específico
+      tags:
+        - boards
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      responses:
+        '200':
+          description: Detalles del tablón
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardWithCategory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/settings:
+    get:
+      summary: Obtener configuración del tablón
+      description: Obtiene la configuración detallada de un tablón
+      tags:
+        - settings
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      responses:
+        '200':
+          description: Configuración del tablón
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardSettings'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/stats:
+    get:
+      summary: Obtener estadísticas del tablón
+      description: Obtiene estadísticas sobre la actividad de un tablón
+      tags:
+        - boards
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - name: period
+          in: query
+          description: Período de tiempo para las estadísticas
+          schema:
+            type: string
+            enum: [day, week, month, all]
+            default: week
+      responses:
+        '200':
+          description: Estadísticas del tablón
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BoardStats'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/popular:
+    get:
+      summary: Obtener hilos populares del tablón
+      description: Obtiene los hilos más populares de un tablón específico
+      tags:
+        - boards
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+        - name: limit
+          in: query
+          description: Número máximo de hilos a devolver
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 5
+        - name: period
+          in: query
+          description: Período de tiempo para calcular popularidad
+          schema:
+            type: string
+            enum: [hour, day, week]
+            default: day
+      responses:
+        '200':
+          description: Hilos populares del tablón
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ThreadWithStats'
+                  meta:
+                    type: object
+                    properties:
+                      period:
+                        type: string
+                        example: day
+                      boardId:
+                        type: string
+                        example: b
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/{boardId}/rules:
+    get:
+      summary: Obtener reglas del tablón
+      description: Obtiene las reglas específicas de un tablón
+      tags:
+        - boards
+      parameters:
+        - $ref: '#/components/parameters/PathBoardId'
+      responses:
+        '200':
+          description: Reglas del tablón
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BoardRule'
+                  meta:
+                    type: object
+                    properties:
+                      lastUpdated:
+                        type: string
+                        format: date-time
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /categories:
+    get:
+      summary: Listar categorías
+      description: Obtiene la lista de todas las categorías de tablones
+      tags:
+        - categories
+      responses:
+        '200':
+          description: Lista de categorías
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+
+  /categories/{categoryId}:
+    get:
+      summary: Obtener categoría
+      description: Obtiene información detallada de una categoría específica
+      tags:
+        - categories
+      parameters:
+        - name: categoryId
+          in: path
+          required: true
+          description: ID de la categoría
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles de la categoría
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryWithBoards'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /boards/search:
+    get:
+      summary: Buscar tablones
+      description: Busca tablones por nombre o descripción
+      tags:
+        - boards
+      parameters:
+        - name: query
+          in: query
+          required: true
+          description: Texto a buscar
+          schema:
+            type: string
+            minLength: 2
+        - name: includeNsfw
+          in: query
+          description: Incluir tablones NSFW en resultados
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Resultados de búsqueda
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BoardWithCategory'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+components:
+  parameters:
+    QueryLimit:
+      name: limit
+      in: query
+      description: Número máximo de elementos a devolver
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    QueryOffset:
+      name: offset
+      in: query
+      description: Número de elementos a saltar
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+    PathBoardId:
+      name: boardId
+      in: path
+      description: ID del tablón
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - statusCode
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        message:
+          type: string
+          example: Bad Request
+        error:
+          type: string
+          example: Invalid input
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+    PaginationMeta:
+      type: object
+      properties:
+        totalItems:
+          type: integer
+          example: 100
+        itemCount:
+          type: integer
+          example: 20
+        itemsPerPage:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 5
+        currentPage:
+          type: integer
+          example: 1
+
+    Board:
+      type: object
+      properties:
+        id:
+          type: string
+          example: b
+        name:
+          type: string
+          example: Random
+        description:
+          type: string
+          nullable: true
+          example: Random discussion
+        isNsfw:
+          type: boolean
+          example: false
+        isArchived:
+          type: boolean
+          example: false
+        maxThreads:
+          type: integer
+          example: 200
+        maxReportsPerHour:
+          type: integer
+          example: 10
+        bumpLimit:
+          type: integer
+          example: 300
+        cooldownThreads:
+          type: integer
+          example: 60
+        cooldownReplies:
+          type: integer
+          example: 30
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        categoryId:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+
+    BoardWithCategory:
+      allOf:
+        - $ref: '#/components/schemas/Board'
+        - type: object
+          properties:
+            category:
+              $ref: '#/components/schemas/Category'
+            activeThreads:
+              type: integer
+              example: 150
+            postsPerHour:
+              type: integer
+              example: 120
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        name:
+          type: string
+          example: Japanese Culture
+        description:
+          type: string
+          nullable: true
+          example: Boards related to Japanese culture and media
+        order:
+          type: integer
+          example: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CategoryWithBoards:
+      allOf:
+        - $ref: '#/components/schemas/Category'
+        - type: object
+          properties:
+            boards:
+              type: array
+              items:
+                $ref: '#/components/schemas/Board'
+
+    BoardSettings:
+      type: object
+      properties:
+        boardId:
+          type: string
+          example: b
+        threadPostingEnabled:
+          type: boolean
+          example: true
+        postingEnabled:
+          type: boolean
+          example: true
+        fileUploadEnabled:
+          type: boolean
+          example: true
+        maxFileSize:
+          type: integer
+          example: 4194304
+        maxFilesPerPost:
+          type: integer
+          example: 5
+        allowedFileTypes:
+          type: array
+          items:
+            type: string
+          example: ["image/jpeg", "image/png", "image/gif"]
+        maxMessageLength:
+          type: integer
+          example: 5000
+        maxSubjectLength:
+          type: integer
+          example: 100
+        requireCaptchaForThread:
+          type: boolean
+          example: true
+        requireCaptchaForPost:
+          type: boolean
+          example: true
+        captchaThreshold:
+          type: integer
+          example: 3
+          description: Número de posts antes de requerir captcha
+        enableSpoilers:
+          type: boolean
+          example: true
+        enableTripcodes:
+          type: boolean
+          example: true
+        enableSignatureImages:
+          type: boolean
+          example: false
+        useCustomCSS:
+          type: boolean
+          example: false
+        customCSSURL:
+          type: string
+          nullable: true
+          format: uri
+        updatedAt:
+          type: string
+          format: date-time
+
+    BoardStats:
+      type: object
+      properties:
+        boardId:
+          type: string
+          example: b
+        period:
+          type: string
+          example: week
+        activeThreads:
+          type: integer
+          example: 150
+        totalPosts:
+          type: integer
+          example: 50000
+        totalThreads:
+          type: integer
+          example: 1000
+        postsPerHour:
+          type: array
+          items:
+            type: object
+            properties:
+              hour:
+                type: string
+                format: date-time
+              count:
+                type: integer
+          example: [
+            { "hour": "2023-01-01T00:00:00Z", "count": 120 },
+            { "hour": "2023-01-01T01:00:00Z", "count": 150 }
+          ]
+        postsPerDay:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: string
+                format: date
+              count:
+                type: integer
+          example: [
+            { "day": "2023-01-01", "count": 2500 },
+            { "day": "2023-01-02", "count": 2700 }
+          ]
+        userActivity:
+          type: object
+          properties:
+            uniqueUsers:
+              type: integer
+              example: 5000
+            returningUsers:
+              type: integer
+              example: 2000
+        fileStats:
+          type: object
+          properties:
+            totalFiles:
+              type: integer
+              example: 30000
+            totalSize:
+              type: integer
+              example: 50000000
+            filesByType:
+              type: object
+              additionalProperties:
+                type: integer
+              example:
+                "image/jpeg": 15000
+                "image/png": 10000
+                "image/gif": 5000
+
+    BoardRule:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        boardId:
+          type: string
+          example: b
+        order:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: No spam
+        description:
+          type: string
+          example: Do not post the same content repeatedly
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ThreadWithStats:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 123e4567-e89b-12d3-a456-426614174000
+        subject:
+          type: string
+          nullable: true
+          example: Thread subject
+        isSticky:
+          type: boolean
+          example: false
+        isLocked:
+          type: boolean
+          example: false
+        isCyclic:
+          type: boolean
+          example: false
+        bumpedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        boardId:
+          type: string
+          example: b
+        replyCount:
+          type: integer
+          example: 42
+        fileCount:
+          type: integer
+          example: 15
+        excerpt:
+          type: string
+          example: This is the beginning of the thread text...
+        thumbnailUrl:
+          type: string
+          format: uri
+          nullable: true
+          example: https://example.com/path/to/thumbnail.jpg

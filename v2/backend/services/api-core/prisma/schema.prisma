@@ -1,0 +1,265 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Módelo de usuario (administradores, moderadores, etc.)
+model User {
+  id             String         @id @default(uuid())
+  username       String         @unique
+  email          String         @unique
+  passwordHash   String
+  role           Role           @default(USER)
+  isActive       Boolean        @default(true)
+  isBanned       Boolean        @default(false)
+  twoFactorAuth  Boolean        @default(false)
+  twoFactorSecret String?       
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  lastLoginAt    DateTime?
+  refreshTokens  RefreshToken[]
+  moderatedBoards ModeratorBoard[]
+  actions        AuditLog[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Módelo para tablones
+model Board {
+  id                String   @id // Código corto del tablón (ej: "b", "pol")
+  name              String
+  description       String?
+  isNsfw            Boolean  @default(false)
+  isArchived        Boolean  @default(false)
+  maxThreads        Int      @default(200)
+  maxReportsPerHour Int      @default(10)
+  bumpLimit         Int      @default(300)
+  cooldownThreads   Int      @default(60) // segundos
+  cooldownReplies   Int      @default(30) // segundos
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  category          Category @relation(fields: [categoryId], references: [id])
+  categoryId        String
+  threads           Thread[]
+  boardModerators   ModeratorBoard[]
+  wordfilters       WordFilter[]
+  
+  @@index([categoryId])
+}
+
+// Categorías de tablones
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  boards      Board[]
+}
+
+// Asignación de moderadores a tablones
+model ModeratorBoard {
+  id        String   @id @default(uuid())
+  userId    String
+  boardId   String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, boardId])
+  @@index([userId])
+  @@index([boardId])
+}
+
+// Modelo para hilos
+model Thread {
+  id              String    @id @default(uuid())
+  subject         String?   @db.VarChar(100)
+  isSticky        Boolean   @default(false)
+  isLocked        Boolean   @default(false)
+  isCyclic        Boolean   @default(false) // Para hilos que eliminan posts antiguos
+  cycleLimit      Int?      // Límite para threads cíclicos
+  bumpedAt        DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  ipHash          String?   // Hash de IP anonimizado
+  posts           Post[]
+  board           Board     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  boardId         String
+  reports         Report[]
+
+  @@index([boardId, bumpedAt(sort: Desc)])
+  @@index([boardId, createdAt(sort: Desc)])
+  @@index([ipHash])
+}
+
+// Modelo para posts
+model Post {
+  id              String    @id @default(uuid())
+  postNumber      Int       // Número secuencial visible en el board
+  name            String?   @default("Anonymous") @db.VarChar(100)
+  tripcode        String?   @db.VarChar(100)
+  message         String?   @db.Text
+  ipHash          String?   // Hash de IP anonimizado
+  isDeleted       Boolean   @default(false)
+  isSpoilered     Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  thread          Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId        String
+  files           File[]
+  reports         Report[]
+
+  @@unique([threadId, postNumber])
+  @@index([threadId, createdAt])
+  @@index([ipHash])
+}
+
+// Modelo para archivos (imágenes, videos, etc.)
+model File {
+  id              String    @id @default(uuid())
+  filename        String    // Nombre original del archivo
+  storedFilename  String    @unique // Nombre en el sistema
+  filesize        Int       // Tamaño en bytes
+  width           Int?      // Ancho de imagen/video en píxeles
+  height          Int?      // Alto de imagen/video en píxeles
+  thumbnailFilename String  // Nombre de la miniatura
+  mimeType        String    // Tipo MIME
+  md5Hash         String    // Hash MD5 para detección de duplicados
+  sha256Hash      String    // Hash SHA256 para verificación de integridad
+  isSpoilered     Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  post            Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId          String
+
+  @@index([md5Hash])
+  @@index([postId])
+}
+
+// Modelo para reportes
+model Report {
+  id           String       @id @default(uuid())
+  reason       ReportReason
+  additionalInfo String?    @db.Text
+  ipHash       String       // Hash de IP anonimizado
+  isResolved   Boolean      @default(false)
+  resolvedBy   String?      // ID del moderador que resolvió el reporte
+  createdAt    DateTime     @default(now())
+  resolvedAt   DateTime?
+  post         Post?        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  postId       String?
+  thread       Thread?      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId     String?
+  
+  @@index([postId])
+  @@index([threadId])
+  @@index([ipHash])
+  @@index([createdAt])
+  @@index([isResolved])
+}
+
+// Modelo para registro de auditoría
+model AuditLog {
+  id           String     @id @default(uuid())
+  action       String     // Tipo de acción realizada
+  entityType   String     // Tipo de entidad afectada (thread, post, etc.)
+  entityId     String     // ID de la entidad afectada
+  details      Json?      // Detalles adicionales como JSON
+  ipAddress    String?    // IP de la acción (sólo para moderadores autenticados)
+  createdAt    DateTime   @default(now())
+  user         User?      @relation(fields: [userId], references: [id])
+  userId       String?    // ID del usuario/moderador (nulo para acciones anónimas)
+  
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// Modelo para baneos
+model Ban {
+  id           String     @id @default(uuid())
+  ipHash       String     // Hash de IP baneada
+  reason       String?    @db.Text
+  expiresAt    DateTime?  // Null para baneos permanentes
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  createdBy    String     // ID del moderador
+  boardId      String?    // Null para baneos globales
+  appealReason String?    @db.Text
+  appealStatus AppealStatus @default(NONE)
+  
+  @@index([ipHash])
+  @@index([boardId])
+  @@index([isActive, expiresAt])
+}
+
+// Modelo para filtros de palabras
+model WordFilter {
+  id           String     @id @default(uuid())
+  pattern      String     // Patrón a filtrar
+  replacement  String     // Texto de reemplazo
+  isRegex      Boolean    @default(false)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  boardId      String?    // Null para filtros globales
+  board        Board?     @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  
+  @@index([boardId])
+  @@index([isActive])
+}
+
+// Modelo para captchas
+model Captcha {
+  id           String     @id @default(uuid())
+  solution     String     // Solución hasheada
+  expiresAt    DateTime
+  createdAt    DateTime   @default(now())
+  ipHash       String     // Hash de IP que solicitó el captcha
+  isUsed       Boolean    @default(false)
+  
+  @@index([expiresAt])
+  @@index([ipHash])
+}
+
+// Enumeraciones
+enum Role {
+  USER
+  JANITOR
+  MODERATOR
+  ADMIN
+}
+
+enum ReportReason {
+  ILLEGAL
+  SPAM
+  OFFENSIVE
+  OFF_TOPIC
+  OTHER
+}
+
+enum AppealStatus {
+  NONE
+  PENDING
+  APPROVED
+  DENIED
+}

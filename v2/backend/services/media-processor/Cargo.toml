@@ -1,0 +1,64 @@
+[package]
+name = "backend_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.4.0"
+actix-cors = "0.6.4"
+actix-rt = "2.9.0"
+actix-files = "0.6.2"
+tokio = { version = "1.29.1", features = ["full"] }
+tokio-stream = "0.1.14"
+futures = "0.3.28"
+serde = { version = "1.0.171", features = ["derive"] }
+serde_json = "1.0.103"
+sqlx = { version = "0.7.1", features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "json", "macros"] }
+deadpool-redis = { version = "0.13.0", features = ["serde"] }
+aws-sdk-s3 = "0.28.0"
+aws-config = "0.55.3"
+jsonwebtoken = "8.3.0"
+uuid = { version = "1.4.1", features = ["serde", "v4"] }
+chrono = { version = "0.4.26", features = ["serde"] }
+argon2 = "0.5.0"
+rand = "0.8.5"
+dotenv = "0.15.0"
+config = "0.13.3"
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+validator = { version = "0.16.1", features = ["derive"] }
+mime = "0.3.17"
+actix-multipart = "0.6.1"
+image = "0.24.6"
+md5 = "0.7.0"
+sha2 = "0.10.7"
+actix-web-prometheus = "0.1.2"
+prometheus = { version = "0.13.3", features = ["process"] }
+derive_more = "0.99.17"
+sanitize-html = "0.7.0"
+thiserror = "1.0.44"
+anyhow = "1.0.72"
+secrecy = { version = "0.8.0", features = ["serde"] }
+reqwest = { version = "0.11.18", features = ["json"] }
+actix-session = { version = "0.7.2", features = ["redis-rs-session"] }
+redis = { version = "0.23.0", features = ["tokio-comp"] }
+actix-service = "2.0.2"
+futures-util = "0.3.28"
+
+[dev-dependencies]
+actix-rt = "2.9.0"
+tokio-test = "0.4.2"
+mockall = "0.11.4"
+fake = "2.6.1"
+rstest = "0.18.1"
+wiremock = "0.5.19"
+claim = "0.5.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 3
