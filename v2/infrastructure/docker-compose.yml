@@ -48,20 +48,20 @@ services:
   # Backend API
   api:
     build:
-      context: ../backend
+      context: ../api-core
       dockerfile: Dockerfile
       target: build
     container_name: 4chan_api
     volumes:
-      - ../backend:/app
+      - ../api-core:/app
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/4chan?schema=public
+      - DATABASE_URL=postgresql://[USERNAME]:[PASSWORD]@postgres:5432/4chan?schema=public
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=development_jwt_secret
-      - JWT_REFRESH_SECRET=development_refresh_secret
+      - JWT_SECRET=[REDACTED]
+      - JWT_REFRESH_SECRET=[REDACTED]
       - FILE_STORAGE_TYPE=local
     depends_on:
       - postgres
@@ -73,21 +73,21 @@ services:
   # Auth Service
   auth:
     build:
-      context: ../backend
+      context: ../api-core
       dockerfile: Dockerfile
       target: build
     container_name: 4chan_auth
     command: npm run start:dev -- --app auth
     volumes:
-      - ../backend:/app
+      - ../api-core:/app
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/4chan?schema=public
+      - DATABASE_URL=postgresql://[USERNAME]:[PASSWORD]@postgres:5432/4chan?schema=public
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=development_jwt_secret
-      - JWT_REFRESH_SECRET=development_refresh_secret
+      - JWT_SECRET=[REDACTED]
+      - JWT_REFRESH_SECRET=[REDACTED]
     depends_on:
       - postgres
       - redis
@@ -98,21 +98,21 @@ services:
   # File Service
   files:
     build:
-      context: ../backend
+      context: ../api-core
       dockerfile: Dockerfile
       target: build
     container_name: 4chan_files
     command: npm run start:dev -- --app files
     volumes:
-      - ../backend:/app
+      - ../api-core:/app
       - /app/node_modules
       - ./uploads:/app/uploads
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/4chan?schema=public
+      - DATABASE_URL=postgresql://[USERNAME]:[PASSWORD]@postgres:5432/4chan?schema=public
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - JWT_SECRET=development_jwt_secret
+      - JWT_SECRET=[REDACTED]
       - FILE_STORAGE_TYPE=local
       - FILE_STORAGE_PATH=/app/uploads
     depends_on:
@@ -133,8 +133,8 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: [USERNAME]
+      POSTGRES_PASSWORD: [PASSWORD]
       POSTGRES_DB: 4chan
     networks:
       - backend
@@ -172,8 +172,8 @@ services:
     volumes:
       - minio_data:/data
     environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123
+      MINIO_ROOT_USER: [USERNAME]
+      MINIO_ROOT_PASSWORD: [PASSWORD]
     command: server --console-address ":9001" /data
     networks:
       - backend
@@ -184,7 +184,7 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # Prometheus (Métricas)
+  # Prometheus (Mï¿½tricas)
   prometheus:
     image: prom/prometheus:latest
     container_name: 4chan_prometheus
@@ -197,7 +197,7 @@ services:
       - monitoring
     restart: unless-stopped
 
-  # Grafana (Visualización)
+  # Grafana (Visualizaciï¿½n)
   grafana:
     image: grafana/grafana:latest
     container_name: 4chan_grafana
@@ -207,7 +207,7 @@ services:
       - grafana_data:/var/lib/grafana
       - ./docker/grafana/provisioning:/etc/grafana/provisioning
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=[PASSWORD]
       - GF_USERS_ALLOW_SIGN_UP=false
     depends_on:
       - prometheus

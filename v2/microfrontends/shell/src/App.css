@@ -1,0 +1,52 @@
+.app-container {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-header {
+  background-color: #2b2b2b;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #ffffff;
+}
+
+.app-header nav ul {
+  list-style: none;
+  display: flex;
+  padding: 0;
+  margin: 1rem 0 0 0;
+}
+
+.app-header nav ul li {
+  margin-right: 1rem;
+}
+
+.app-header nav ul li a {
+  color: #999999;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.app-header nav ul li a:hover {
+  color: #ffffff;
+}
+
+.app-content {
+  flex: 1;
+  padding: 1rem;
+}
+
+.app-footer {
+  background-color: #2b2b2b;
+  padding: 1rem;
+  text-align: center;
+  color: #999999;
+  font-size: 0.875rem;
+}

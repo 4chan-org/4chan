@@ -1,134 +1,69 @@
-# 4chan v2 - Proyecto de Modernización
+# Proyecto de Modernización v2
 
-Este proyecto representa la reimplementación moderna de 4chan, siguiendo una arquitectura de microservicios con Go y Rust para el backend, y React con TypeScript para el frontend.
+Este directorio contiene la versión modernizada de la aplicación, implementando una arquitectura moderna basada en microservicios y micro-frontends.
 
 ## Estructura del Proyecto
 
-```
-v2/
-├── backend_go/            # Servicios principales en Go (API, moderación)
-├── backend_rust/          # Servicios críticos en Rust (archivos, seguridad)
-├── frontend_new/          # Aplicación frontend moderna en React/TypeScript
-└── docs/                  # Documentación técnica
-```
+- **api-core** - Núcleo central de la API implementado con TypeScript/NestJS
+  - API Gateway y orquestación de servicios
+  - Gestión de autenticación y autorización
+  - Implementación de lógica de negocio central
 
-## Arquitectura
+- **file-service** - Servicio de gestión de archivos implementado en Go
+  - Validación segura de archivos
+  - Transformación y optimización de imágenes
+  - Almacenamiento eficiente en S3/MinIO
 
-El sistema sigue una arquitectura de microservicios distribuida:
+- **media-processor** - Procesador avanzado de medios implementado en Rust
+  - Análisis forense de imágenes
+  - Procesamiento de alta performance
+  - Detección de contenido prohibido
 
-- **API Gateway**: Punto de entrada único para todas las solicitudes
-- **Servicio de Autenticación (Go)**: Manejo de identidades y permisos
-- **Servicio de Contenido (Go)**: Gestión de tablones, hilos y posts
-- **Servicio de Archivos (Rust)**: Procesamiento seguro de archivos e imágenes
-- **Servicio de Moderación (Go)**: Herramientas avanzadas de moderación
+- **frontend-legacy** - Implementación React tradicional del frontend
+  - Soporte para temas clásicos
+  - Interfaz responsiva
+  - Componentes React reutilizables
+
+- **frontend-modern** - Implementación avanzada con arquitectura moderna
+  - Gestión de estado con Redux Toolkit
+  - Integración con Web Components
+  - Optimización avanzada de rendimiento
+
+- **microfrontends** - Implementación completa de micro-frontends
+  - shell - Aplicación principal que orquesta los micro-frontends
+  - board-viewer - Visualización de tablones e hilos
+  - catalog-viewer - Vista de catálogo
+  - post-creator - Creación de posts
+  - auth - Gestión de autenticación
+  - media-viewer - Visualización de medios
+  - moderation - Herramientas de moderación
+
+- **api-specs** - Definiciones de API en formato OpenAPI/Swagger
+  - Documentación completa de endpoints
+  - Especificaciones para generación de clientes
+
+- **docs** - Documentación técnica
+  - Arquitectura y diseño
+  - Modelos de seguridad
+
+- **infrastructure** - Configuración de infraestructura
+  - Docker y Kubernetes
+  - CI/CD
+  - Scripts de automatización
 
 ## Tecnologías Principales
 
-### Backend (Go)
-- Go 1.22+
-- Gin Gonic para API REST
-- JWT para autenticación
-- PostgreSQL con pgx para la persistencia
-- Redis para caché y gestión de sesiones
-- Prometheus para métricas
+- Backend: TypeScript (NestJS), Go, Rust
+- Frontend: React, TypeScript, Web Components
+- Almacenamiento: PostgreSQL, Redis, S3/MinIO
+- Infraestructura: Docker, Kubernetes
 
-### Backend (Rust)
-- Rust (Edition 2021)
-- Actix Web para servicios HTTP
-- Tokio para procesamiento asíncrono
-- SQLx para acceso a base de datos
-- AWS SDK para almacenamiento S3
+## Desarrollo
 
-### Frontend
-- React 18 con TypeScript
-- React Query para gestión de estado del servidor
-- Redux Toolkit para estado global
-- Styled Components y Tailwind CSS para estilos
-- Framer Motion para animaciones
-
-### Infraestructura
-- Docker y Docker Compose para desarrollo
-- Kubernetes para orquestación en producción
-- Github Actions para CI/CD
-- Neon PostgreSQL en la nube
-- Prometheus, Grafana para monitoreo
-
-## Requisitos
-
-- Go 1.22+
-- Rust 1.70+
-- Node.js 20+
-- Docker y Docker Compose
-- PostgreSQL 15+ (o conexión a Neon PostgreSQL)
-- Redis 7+
-
-## Comenzando
-
-### Configuración de la Base de Datos
-
-Este proyecto utiliza Neon PostgreSQL como base de datos en la nube:
-
-```
-jdbc:postgresql://ep-ancient-bonus-a4qfas6k-pooler.us-east-1.aws.neon.tech/neondb?user=neondb_owner&password=npg_mGXsRdat0E7q&sslmode=require
-```
-
-### Configuración Backend Go
+Cada componente tiene su propio README con instrucciones específicas para desarrollo, pruebas y despliegue.
 
 ```bash
-cd v2/backend_go
-cp .env.example .env
-# Editar .env con las credenciales correctas
-go mod download
-go run .
+# Para ejecutar el stack completo en desarrollo
+cd infrastructure
+docker-compose up
 ```
-
-### Configuración Backend Rust
-
-```bash
-cd v2/backend_rust
-cp .env.example .env
-# Editar .env con las credenciales correctas
-cargo build
-cargo run
-```
-
-### Configuración Frontend
-
-```bash
-cd v2/frontend_new
-cp .env.example .env
-# Editar .env con las URLs correctas
-npm install
-npm run dev
-```
-
-### Ejecución con Docker Compose
-
-```bash
-docker-compose up -d
-```
-
-## Seguridad
-
-Este proyecto implementa múltiples capas de seguridad:
-
-- Validación estricta de entrada en todos los niveles
-- Sanitización de datos y contenido
-- Autenticación multifactor para administradores
-- Procesamiento seguro de archivos en entornos aislados
-- Headers de seguridad y CSP
-- Encriptación en tránsito y en reposo
-- Protección contra ataques comunes (XSS, CSRF, inyección)
-- Pruebas automatizadas de seguridad
-
-## Capacidades Técnicas
-
-- **Escalabilidad**: Arquitectura diseñada para escalar horizontalmente
-- **Rendimiento**: Optimizaciones a nivel de código y base de datos
-- **Resiliencia**: Manejo inteligente de fallos y degradación elegante
-- **Observabilidad**: Métricas, trazas y logs centralizados
-- **Accesibilidad**: Implementación de WCAG 2.1 AA
-
-## Licencia
-
-Este proyecto está licenciado bajo los términos especificados en el archivo LICENSE.

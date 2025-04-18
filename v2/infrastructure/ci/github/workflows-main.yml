@@ -97,7 +97,7 @@ jobs:
           npm run prisma:generate
           DATABASE_URL=postgresql://postgres:postgres@localhost:5432/test_db?schema=public npm run prisma:migrate
       
-      - name: Run backend tests
+      - name: Run api-core tests
         run: |
           cd v2/backend
           npm run test
@@ -179,9 +179,9 @@ jobs:
       - name: Build and push Backend image
         uses: docker/build-push-action@v4
         with:
-          context: ./v2/backend
+          context: ./v2/api-core
           push: true
-          tags: ${{ steps.meta.outputs.tags }}-backend
+          tags: ${{ steps.meta.outputs.tags }}-api-core
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
