@@ -1,79 +1,71 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import { Suspense, lazy } from 'react'
-import './App.css'
+import React, { useEffect } from 'react';
+import { Provider } from 'react-redux';
+import { store } from './store';
+import AppRouter from './routing/AppRouter';
+import { eventBus } from './utils/eventBus';
+import { microfrontendManager } from './utils/microfrontendManager';
+import { ThemeProvider } from './providers/ThemeProvider';
+import './App.css';
 
-// Placeholder components until the actual microfrontends are loaded
-const BoardViewerPlaceholder = () => <div>Loading Board Viewer...</div>
-const CatalogViewerPlaceholder = () => <div>Loading Catalog Viewer...</div>
-const PostCreatorPlaceholder = () => <div>Loading Post Creator...</div>
-const AuthPlaceholder = () => <div>Loading Auth...</div>
-const MediaViewerPlaceholder = () => <div>Loading Media Viewer...</div>
-const ModerationPlaceholder = () => <div>Loading Moderation Tools...</div>
-
-// Dynamic imports for microfrontends
-const BoardViewer = lazy(() => import('./loaders/board-viewer-loader'))
-const CatalogViewer = lazy(() => import('./loaders/catalog-viewer-loader'))
-const PostCreator = lazy(() => import('./loaders/post-creator-loader'))
-const Auth = lazy(() => import('./loaders/auth-loader'))
-const MediaViewer = lazy(() => import('./loaders/media-viewer-loader'))
-const Moderation = lazy(() => import('./loaders/moderation-loader'))
-
-function App() {
+/**
+ * Componente principal de la aplicación shell
+ * 
+ * Se encarga de:
+ * 1. Inicializar el estado global (Redux)
+ * 2. Configurar el bus de eventos
+ * 3. Preparar el gestor de microfrontends
+ * 4. Cargar configuraciones iniciales
+ * 5. Proporcionar el sistema de temas
+ */
+const App: React.FC = () => {
+  // Efecto para inicializar componentes globales
+  useEffect(() => {
+    // Configurar el gestor de microfrontends
+    microfrontendManager.setManifestBaseUrl(import.meta.env.VITE_MICROFRONTEND_BASE_URL || '/microfrontends');
+    
+    // Registrar manejadores globales para eventos del sistema
+    const handleGlobalError = (event: ErrorEvent) => {
+      console.error('[Shell] Error global capturado:', event.error);
+      eventBus.emit('error:global', {
+        message: event.message,
+        source: event.filename,
+        lineno: event.lineno,
+        colno: event.colno,
+        error: event.error,
+      });
+    };
+    
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('[Shell] Promesa rechazada no manejada:', event.reason);
+      eventBus.emit('error:unhandledRejection', {
+        reason: event.reason,
+      });
+    };
+    
+    // Agregar escuchas de eventos globales
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+    
+    // Registrar la shell como iniciada en el bus de eventos
+    eventBus.emit('shell:initialized', {
+      timestamp: new Date().toISOString(),
+      version: import.meta.env.VITE_APP_VERSION || '1.0.0',
+    });
+    
+    // Función de limpieza
+    return () => {
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+  
   return (
-    <Router>
-      <div className="app-container">
-        <header className="app-header">
-          <h1>Imageboard Application</h1>
-          <nav>
-            <ul>
-              <li><a href="/">Home</a></li>
-              <li><a href="/catalog">Catalog</a></li>
-              <li><a href="/auth">Login/Register</a></li>
-            </ul>
-          </nav>
-        </header>
-        
-        <main className="app-content">
-          <Routes>
-            <Route path="/" element={
-              <Suspense fallback={<BoardViewerPlaceholder />}>
-                <BoardViewer />
-              </Suspense>
-            } />
-            <Route path="/catalog" element={
-              <Suspense fallback={<CatalogViewerPlaceholder />}>
-                <CatalogViewer />
-              </Suspense>
-            } />
-            <Route path="/post" element={
-              <Suspense fallback={<PostCreatorPlaceholder />}>
-                <PostCreator />
-              </Suspense>
-            } />
-            <Route path="/auth" element={
-              <Suspense fallback={<AuthPlaceholder />}>
-                <Auth />
-              </Suspense>
-            } />
-            <Route path="/media/:id" element={
-              <Suspense fallback={<MediaViewerPlaceholder />}>
-                <MediaViewer />
-              </Suspense>
-            } />
-            <Route path="/mod/*" element={
-              <Suspense fallback={<ModerationPlaceholder />}>
-                <Moderation />
-              </Suspense>
-            } />
-          </Routes>
-        </main>
-        
-        <footer className="app-footer">
-          <p>© 2025 Imageboard Application</p>
-        </footer>
-      </div>
-    </Router>
-  )
-}
+    <Provider store={store}>
+      <ThemeProvider>
+        <AppRouter />
+      </ThemeProvider>
+    </Provider>
+  );
+};
 
-export default App
+export default App;
